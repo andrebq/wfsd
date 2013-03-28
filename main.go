@@ -9,6 +9,7 @@ import (
 var (
 	port = flag.String("p", ":8081", "Port to listen")
 	cfg = flag.String("cfg", "wfsd.config", "Config file")
+	disableCache = flag.Bool("disableCache", false, "Make wfsd ignore the If-Modified-Since Header")
 )
 
 func main() {
@@ -34,10 +35,24 @@ func main() {
 	http.Handle("/", logHandler(http.FileServer(http.Dir("."))))
 
 	log.Printf("Starting server at %v", *port)
-	err = http.ListenAndServe(*port, nil)
+	if *disableCache {
+		log.Printf("Cache is now disabled...")
+		err = http.ListenAndServe(*port, createIgnoreCacheHandler(http.DefaultServeMux))
+	} else {
+		err = http.ListenAndServe(*port, nil)
+	}
+
 	if err != nil {
 		log.Printf("Unable to start server. Cause: %v", err)
 	}
+}
+
+// wrap handler with a new hander that will remove the If-Modified-Since header
+func createIgnoreCacheHandler(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		req.Header.Del("If-Modified-Since")
+		handler.ServeHTTP(w, req)
+	})
 }
 
 func logHandler(handler http.Handler) http.Handler {
