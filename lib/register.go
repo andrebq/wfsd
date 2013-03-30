@@ -40,3 +40,12 @@ func logHandler(handler http.Handler, log LogFn) http.Handler {
 		handler.ServeHTTP(w, req)
 	})
 }
+
+// Wrap the given handler and remove the If-Modified-Since header before
+// calling the hander
+func DisableCacheHandler(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		req.Header.Del("If-Modified-Since")
+		handler.ServeHTTP(w, req)
+	})
+}
