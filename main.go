@@ -21,7 +21,9 @@ func main() {
 		log.Printf("Error loading config file. Cause: %v", err)
 	}
 	lib.RegisterConfig(http.DefaultServeMux, wfsdCfg, log.Printf)
-	lib.ServeRootFrom(http.DefaultServeMux, ".", log.Printf)
+	if !wfsdCfg.IsRootSet() {
+		lib.ServeRootFrom(http.DefaultServeMux, ".", log.Printf)
+	}
 
 	log.Printf("Starting server at %v", *port)
 	if *disableCache {
