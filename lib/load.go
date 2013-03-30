@@ -1,4 +1,4 @@
-package main
+package lib
 
 import (
 	"encoding/json"
@@ -8,7 +8,9 @@ import (
 func Load(file string) (*Config, error) {
 	cfg := &Config{}
 	fd, err := os.Open(file)
-	if err != nil { return cfg, err }
+	if err != nil {
+		return cfg, err
+	}
 	defer fd.Close()
 
 	dec := json.NewDecoder(fd)

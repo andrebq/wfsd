@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"github.com/andrebq/wfsd/lib"
 )
 
 var (
@@ -12,27 +13,15 @@ var (
 	disableCache = flag.Bool("disableCache", false, "Make wfsd ignore the If-Modified-Since Header")
 )
 
+
 func main() {
 	flag.Parse()
-	cfg, err := Load(*cfg)
+	wfsdCfg, err := lib.Load(*cfg)
 	if err != nil {
 		log.Printf("Error loading config file. Cause: %v", err)
 	}
-
-	for _, p := range cfg.Paths {
-		log.Printf("Path: %v", p.Prefix)
-		log.Printf("Directory: %v", p.Directory)
-		log.Printf("Strip prefix? %v", p.StripPrefix)
-
-		dir := http.Dir(p.Directory)
-		handler := http.FileServer(dir)
-		if p.StripPrefix {
-			handler = http.StripPrefix(p.Prefix, handler)
-		}
-		http.Handle(p.Prefix, logHandler(handler))
-	}
-
-	http.Handle("/", logHandler(http.FileServer(http.Dir("."))))
+	lib.RegisterConfig(http.DefaultServeMux, wfsdCfg, log.Printf)
+	lib.ServeRootFrom(http.DefaultServeMux, ".", log.Printf)
 
 	log.Printf("Starting server at %v", *port)
 	if *disableCache {
@@ -55,9 +44,3 @@ func createIgnoreCacheHandler(handler http.Handler) http.Handler {
 	})
 }
 
-func logHandler(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		log.Printf("%v - %v", req.Method, req.URL)
-		handler.ServeHTTP(w, req)
-	})
-}
