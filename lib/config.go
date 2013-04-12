@@ -5,7 +5,7 @@ type Config struct {
 	Paths []Path
 }
 
-// Path entry 
+// Path entry
 type Path struct {
 	Prefix      string
 	Directory   string
