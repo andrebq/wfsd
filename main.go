@@ -2,17 +2,16 @@ package main
 
 import (
 	"flag"
+	"github.com/andrebq/wfsd/lib"
 	"log"
 	"net/http"
-	"github.com/andrebq/wfsd/lib"
 )
 
 var (
-	port = flag.String("p", ":8081", "Port to listen")
-	cfg = flag.String("cfg", "wfsd.config", "Config file")
+	port         = flag.String("p", ":8081", "Port to listen")
+	cfg          = flag.String("cfg", "wfsd.config", "Config file")
 	disableCache = flag.Bool("disableCache", false, "Make wfsd ignore the If-Modified-Since Header")
 )
-
 
 func main() {
 	flag.Parse()
@@ -37,4 +36,3 @@ func main() {
 		log.Printf("Unable to start server. Cause: %v", err)
 	}
 }
-

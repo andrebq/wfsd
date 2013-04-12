@@ -10,6 +10,7 @@ type Path struct {
 	Prefix      string
 	Directory   string
 	StripPrefix bool
+	NineProxy   string
 }
 
 // Return true if the root path "/" is present in this config

@@ -12,19 +12,27 @@ type Mux interface {
 // Type used to log information
 type LogFn func(format string, args ...interface{})
 
+func registerDirectory(p Path, mux Mux, log LogFn) {
+	log("Path: %v", p.Prefix)
+	log("Directory: %v", p.Directory)
+	log("Strip prefix? %v", p.StripPrefix)
+
+	dir := http.Dir(p.Directory)
+	handler := http.FileServer(dir)
+	if p.StripPrefix {
+		handler = http.StripPrefix(p.Prefix, handler)
+	}
+	mux.Handle(p.Prefix, logHandler(handler, log))
+}
+
 // Register the given configuration on the provided mux
 func RegisterConfig(mux Mux, cfg *Config, log LogFn) {
 	for _, p := range cfg.Paths {
-		log("Path: %v", p.Prefix)
-		log("Directory: %v", p.Directory)
-		log("Strip prefix? %v", p.StripPrefix)
-
-		dir := http.Dir(p.Directory)
-		handler := http.FileServer(dir)
-		if p.StripPrefix {
-			handler = http.StripPrefix(p.Prefix, handler)
+		if len(p.Directory) > 0 {
+			registerDirectory(p, mux, log)
+		} else if len(p.NineProxy) > 0 {
+			register9Proxy(p.Prefix, p.NineProxy, mux, log)
 		}
-		mux.Handle(p.Prefix, logHandler(handler, log))
 	}
 }
 
