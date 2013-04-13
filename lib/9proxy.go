@@ -5,7 +5,9 @@ import (
 	"code.google.com/p/go9p/p/clnt"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"os"
+	"unicode/utf8"
 )
 
 const (
@@ -65,12 +67,32 @@ func (w *WfsClient) Process(msg *WfsMessage) *WfsMessage {
 	switch msg.Type {
 	case WfsOpen:
 		return w.OpenFile(msg)
-		/* case WfsRead: return w.ReadFile(msg)
-		case WfsWrite: return w.WriteFile(msg)
+	case WfsRead:
+		return w.ReadFile(msg)
+		/*case WfsWrite: return w.WriteFile(msg)
 		case WfsClose: return w.CloseFile(msg)
 		*/
 	}
 	msg.Error = "Invalid message type"
+	return msg
+}
+
+func (w *WfsClient) ReadFile(msg *WfsMessage) *WfsMessage {
+	if file, has := w.UseFid(msg.Fid); has {
+		buf, err := ioutil.ReadAll(file)
+		if err != nil {
+			msg.Error = err.Error()
+		} else {
+			if utf8.Valid(buf) {
+				msg.Data = string(buf)
+			} else {
+				// use base64
+				msg.Error = "Not possible at this moment"
+			}
+		}
+	} else {
+		msg.Error = "Fid isn't open"
+	}
 	return msg
 }
 
@@ -87,13 +109,18 @@ func (w *WfsClient) OpenFile(msg *WfsMessage) *WfsMessage {
 			msg.Error = err.Error()
 			return msg
 		}
-		w.UseFid(msg.Fid, file)
+		w.BindFid(msg.Fid, file)
 	default:
 		msg.Error = "Invalid mode"
 	}
 	return msg
 }
 
-func (w *WfsClient) UseFid(fid int32, file *clnt.File) {
+func (w *WfsClient) BindFid(fid int32, file *clnt.File) {
 	w.files[fid] = file
+}
+
+func (w *WfsClient) UseFid(fid int32) (*clnt.File, bool) {
+	file, has := w.files[fid]
+	return file, has
 }
