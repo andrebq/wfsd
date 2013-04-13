@@ -69,11 +69,21 @@ func (w *WfsClient) Process(msg *WfsMessage) *WfsMessage {
 		return w.OpenFile(msg)
 	case WfsRead:
 		return w.ReadFile(msg)
+	case WfsClose:
+		return w.CloseFile(msg)
 		/*case WfsWrite: return w.WriteFile(msg)
-		case WfsClose: return w.CloseFile(msg)
-		*/
+		 */
 	}
 	msg.Error = "Invalid message type"
+	return msg
+}
+
+func (w *WfsClient) CloseFile(msg *WfsMessage) *WfsMessage {
+	if _, has := w.UseFid(msg.Fid); has {
+		w.CloseFid(msg.Fid)
+		return msg
+	}
+	msg.Error = "fid not found"
 	return msg
 }
 
@@ -123,4 +133,11 @@ func (w *WfsClient) BindFid(fid int32, file *clnt.File) {
 func (w *WfsClient) UseFid(fid int32) (*clnt.File, bool) {
 	file, has := w.files[fid]
 	return file, has
+}
+
+func (w *WfsClient) CloseFid(fid int32) {
+	if file, has := w.UseFid(fid); has {
+		file.Close()
+		delete(w.files, fid)
+	}
 }
