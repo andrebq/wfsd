@@ -1,88 +1,99 @@
 package lib
 
 import (
-	"encoding/binary"
-	"errors"
+	"code.google.com/p/go9p/p"
+	"code.google.com/p/go9p/p/clnt"
+	"encoding/json"
 	"io"
+	"os"
 )
 
-type Signal struct{}
+const (
+	WfsOpen  = 0
+	WfsRead  = 1
+	WfsWrite = 2
+	WfsClose = 3
 
-type NinePSession struct {
-	client io.ReadWriteCloser
-	remote io.ReadWriteCloser
-	Done   <-chan Signal
-	done   chan Signal
-	stop   bool
+	WfsModeRead      = 0
+	WfsModeWrite     = 1
+	WfsModeReadWrite = 2
+	WfsModeTruncate  = 16
+)
+
+type WfsMessage struct {
+	Tag   int32
+	Type  int32
+	Mode  int32
+	Fid   int32
+	Error string
+	Data  string
 }
 
-func CreateSession(client, remote io.ReadWriteCloser) *NinePSession {
-	ret := &NinePSession{client, remote, nil, make(chan Signal), false}
-	// write only signal
-	ret.Done = ret.done
-	go ret.clientToRemote()
-	go ret.remoteToClient()
-	return ret
+func (msg *WfsMessage) WriteTo(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	return enc.Encode(msg)
 }
 
-func (s *NinePSession) Start() {
-	<-s.done
-	s.stop = true
+func (msg *WfsMessage) ReadFrom(r io.Reader) error {
+	dec := json.NewDecoder(r)
+	return dec.Decode(msg)
 }
 
-func proxyMessage(in, out io.ReadWriteCloser, buf []byte) ([]byte, error) {
-	sz := int32(0)
-	err := binary.Read(in, binary.BigEndian, &sz)
-	if err != nil {
-		return buf, err
-	}
-	err = binary.Write(out, binary.BigEndian, sz)
-	if err != nil {
-		return buf, err
-	}
-	if cap(buf) < int(sz) {
-		buf = make([]byte, int(sz))
-	} else {
-		buf = buf[:int(sz)]
-	}
-	n, err := in.Read(buf)
-	if n != int(sz) {
-		return buf, errors.New("invalid size")
-	}
-	n, err = out.Write(buf)
-	if n != int(sz) {
-		return buf, errors.New("invalid size")
-	}
-	if err != nil {
-		return buf, err
-	}
-	return buf, nil
+type WfsClient struct {
+	c     *clnt.Clnt
+	files map[int32]*clnt.File
 }
 
-func (s *NinePSession) clientToRemote() {
-	// need better error handling instead of simply breaking
-	// everything
-	// but at this point, this should serve as a proof of concept
-	buf := make([]byte, 1024)
-	for !s.stop {
-		var err error
-		buf, err = proxyMessage(s.client, s.remote, buf)
+// Close the connection
+func (w *WfsClient) Close() error {
+	w.c.Unmount()
+	w.files = nil
+	w.c = nil
+	return nil
+}
+
+// Open a new connection to the given remote host
+func NewWfsClient(remote string) (*WfsClient, error) {
+	cli := &WfsClient{nil, make(map[int32]*clnt.File)}
+	user := p.OsUsers.Uid2User(os.Geteuid())
+	var err error
+	cli.c, err = clnt.Mount("tcp", remote, "", user)
+	return cli, err
+}
+
+func (w *WfsClient) Process(msg *WfsMessage) *WfsMessage {
+	switch msg.Type {
+	case WfsOpen:
+		return w.OpenFile(msg)
+		/* case WfsRead: return w.ReadFile(msg)
+		case WfsWrite: return w.WriteFile(msg)
+		case WfsClose: return w.CloseFile(msg)
+		*/
+	}
+	msg.Error = "Invalid message type"
+	return msg
+}
+
+func (w *WfsClient) OpenFile(msg *WfsMessage) *WfsMessage {
+	if _, has := w.files[msg.Fid]; has {
+		msg.Error = "Fid already used"
+		return msg
+	}
+	switch msg.Mode {
+	case WfsModeTruncate, WfsModeReadWrite, WfsModeRead,
+		WfsModeWrite:
+		file, err := w.c.FOpen(msg.Data, uint8(msg.Mode))
 		if err != nil {
-			return
+			msg.Error = err.Error()
+			return msg
 		}
+		w.UseFid(msg.Fid, file)
+	default:
+		msg.Error = "Invalid mode"
 	}
+	return msg
 }
 
-func (s *NinePSession) remoteToClient() {
-	// need better error handling instead of simply breaking
-	// everything
-	// but at this point, this should serve as a proof of concept
-	buf := make([]byte, 1024)
-	for !s.stop {
-		var err error
-		buf, err = proxyMessage(s.remote, s.client, buf)
-		if err != nil {
-			return
-		}
-	}
+func (w *WfsClient) UseFid(fid int32, file *clnt.File) {
+	w.files[fid] = file
 }
