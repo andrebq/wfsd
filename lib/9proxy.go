@@ -29,12 +29,13 @@ const (
 )
 
 type WfsMessage struct {
-	Tag   int32
-	Type  int32
-	Mode  int32
-	Fid   int32
-	Error string
-	Data  string
+	Tag    int32
+	Type   int32
+	Mode   int32
+	Fid    int32
+	NewFid int32
+	Error  string
+	Data   string
 }
 
 func (msg *WfsMessage) WriteTo(w io.Writer) error {
