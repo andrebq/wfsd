@@ -11,15 +11,21 @@ import (
 )
 
 const (
-	WfsOpen  = 0
-	WfsRead  = 1
-	WfsWrite = 2
-	WfsClose = 3
+	WfsOpen   = 0
+	WfsRead   = 1
+	WfsWrite  = 2
+	WfsClose  = 3
+	WfsCreate = 4
 
-	WfsModeRead      = 0
-	WfsModeWrite     = 1
-	WfsModeReadWrite = 2
-	WfsModeTruncate  = 16
+	WfsModeRead      = p.OREAD
+	WfsModeWrite     = p.OWRITE
+	WfsModeReadWrite = p.ORDWR
+	WfsModeTruncate  = p.OTRUNC
+
+	WfsModeDir = p.DMDIR
+
+	WfsPermWrite = p.DMWRITE
+	WfsPermRead  = p.DMREAD
 )
 
 type WfsMessage struct {
@@ -71,10 +77,16 @@ func (w *WfsClient) Process(msg *WfsMessage) *WfsMessage {
 		return w.ReadFile(msg)
 	case WfsClose:
 		return w.CloseFile(msg)
+	case WfsCreate:
+		return w.CreateFile(msg)
 		/*case WfsWrite: return w.WriteFile(msg)
 		 */
 	}
 	msg.Error = "Invalid message type"
+	return msg
+}
+
+func (w *WfsClient) CreateFile(msg *WfsMessage) *WfsMessage {
 	return msg
 }
 
