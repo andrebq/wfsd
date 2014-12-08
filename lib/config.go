@@ -7,10 +7,11 @@ type Config struct {
 
 // Path entry
 type Path struct {
-	Prefix      string
-	Directory   string
-	StripPrefix bool
-	NineProxy   string
+	Prefix       string
+	Directory    string
+	StripPrefix  bool
+	ReverseProxy string
+	TCPProxy     bool
 }
 
 // Return true if the root path "/" is present in this config
