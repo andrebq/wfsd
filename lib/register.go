@@ -6,6 +6,35 @@ import (
 	"net/url"
 )
 
+type limitedReq struct {
+	w    http.ResponseWriter
+	req  *http.Request
+	done chan struct{}
+}
+
+func limitHandler(num int, h http.Handler) http.Handler {
+	if num <= 0 {
+		return h
+	}
+
+	ch := make(chan *limitedReq, num)
+
+	go func(ch chan *limitedReq) {
+		for r := range ch {
+			h.ServeHTTP(r.w, r.req)
+			if r.done != nil {
+				r.done <- struct{}{}
+			}
+		}
+	}(ch)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		done := make(chan struct{})
+		ch <- &limitedReq{w, req, done}
+		<-done
+	})
+}
+
 // Mux interface to register paths
 type Mux interface {
 	Handle(path string, hander http.Handler)
@@ -48,6 +77,8 @@ func registerReverseProxy(p Path, endpoint string, mux Mux, log LogFn) {
 	if p.StripPrefix {
 		handler = http.StripPrefix(p.Prefix, handler)
 	}
+
+	handler = limitHandler(p.Limit, handler)
 
 	mux.Handle(p.Prefix, logHandler(handler, log))
 }

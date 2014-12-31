@@ -12,6 +12,7 @@ type Path struct {
 	StripPrefix  bool
 	ReverseProxy string
 	TCPProxy     bool
+	Limit        int
 }
 
 // Return true if the root path "/" is present in this config
