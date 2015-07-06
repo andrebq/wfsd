@@ -9,6 +9,7 @@ type Config struct {
 type Path struct {
 	Prefix       string
 	Directory    string
+	WithFallback bool
 	StripPrefix  bool
 	ReverseProxy string
 	TCPProxy     bool

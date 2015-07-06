@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
 )
 
 type limitedReq struct {
@@ -35,6 +37,40 @@ func limitHandler(num int, h http.Handler) http.Handler {
 	})
 }
 
+func registerDirectoryWithFallback(cfg Path, mux Mux, log LogFn) {
+	log("Path: %v", cfg.Prefix)
+	log("Directory: %v", cfg.Directory)
+	log("Strip prefix? %v", cfg.StripPrefix)
+	log("Fallback: %v", cfg.ReverseProxy)
+
+	fallback := setupReverseProxy(cfg, log)
+
+	// this handler is quite simple
+	// basically this is a FileServe that combines the
+	// actual directory on cfg and the files avialable using GAS
+	server := func(w http.ResponseWriter, req *http.Request) {
+		p := req.URL.Path
+		// check if the file exists
+		file := filepath.Join(cfg.Directory, filepath.FromSlash(p))
+		_, err := os.Stat(file)
+		if os.IsNotExist(err) {
+			log("Using fallback for %v", p)
+			fallback.ServeHTTP(w, req)
+			return
+		}
+		http.ServeFile(w, req, file)
+		return
+	}
+
+	var handler http.Handler
+	handler = http.HandlerFunc(server)
+
+	if cfg.StripPrefix {
+		handler = http.StripPrefix(cfg.Prefix, http.HandlerFunc(server))
+	}
+	mux.Handle(cfg.Prefix, logHandler(handler, log))
+}
+
 // Mux interface to register paths
 type Mux interface {
 	Handle(path string, hander http.Handler)
@@ -57,17 +93,17 @@ func registerDirectory(p Path, mux Mux, log LogFn) {
 	mux.Handle(p.Prefix, logHandler(handler, log))
 }
 
-func registerTCPProxy(p Path, mux Mux, log LogFn) {
-	log("Ws Proxy at: %v", p.Prefix)
-	mux.Handle(p.Prefix, logHandler(NewWSProxy(), log))
+func registerReverseProxy(p Path, endpoint string, mux Mux, log LogFn) {
+	handler := setupReverseProxy(p, log)
+	mux.Handle(p.Prefix, logHandler(handler, log))
 }
 
-func registerReverseProxy(p Path, endpoint string, mux Mux, log LogFn) {
+func setupReverseProxy(p Path, log LogFn) http.Handler {
 	log("Path: %v", p.Prefix)
-	log("Endpoint: %v", endpoint)
+	log("Endpoint: %v", p.ReverseProxy)
 	log("Strip prefix? %v", p.StripPrefix)
 
-	revUrl, err := url.Parse(endpoint)
+	revUrl, err := url.Parse(p.ReverseProxy)
 	if err != nil {
 		log("Error parsing endpoint url: %v", err)
 	}
@@ -78,18 +114,18 @@ func registerReverseProxy(p Path, endpoint string, mux Mux, log LogFn) {
 		handler = http.StripPrefix(p.Prefix, handler)
 	}
 
-	handler = limitHandler(p.Limit, handler)
-
-	mux.Handle(p.Prefix, logHandler(handler, log))
+	return limitHandler(p.Limit, handler)
 }
 
 // Register the given configuration on the provided mux
 func RegisterConfig(mux Mux, cfg *Config, log LogFn) {
 	for _, p := range cfg.Paths {
 		if len(p.Directory) > 0 {
-			registerDirectory(p, mux, log)
-		} else if p.TCPProxy {
-			registerTCPProxy(p, mux, log)
+			if p.WithFallback {
+				registerDirectoryWithFallback(p, mux, log)
+			} else {
+				registerDirectory(p, mux, log)
+			}
 		} else if len(p.ReverseProxy) > 0 {
 			registerReverseProxy(p, p.ReverseProxy, mux, log)
 		}
